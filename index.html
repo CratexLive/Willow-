@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CricXCrate Live - Afghanistan vs India 3rd T20I</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"></script>
+    <title>CricXCrate Live - Afghanistan vs India</title>
     <style>
         body { margin: 0; padding: 0; background-color: #050a0f; }
     </style>
@@ -25,20 +24,7 @@ class CricXCrateUI extends HTMLElement {
     this.SENSITIVITY = 2.5;
     this.CONFIG = {
       telegramLink: "https://t.me/+xSqMXDXp78ZiOWQ1",
-      servers: {
-        // Alpha Feed Servers
-        "Alpha - Amazon": "https://otte.cache.aiv-cdn.net/pdx-nitro/live/clients/dash/enc/r5nicrqiyf/out/v1/6659e5152b4e4bb89917f57640f594fb/cenc.mpd",
-        "Alpha - Fistly": "https://otte.live.fly.ww.aiv-cdn.net/pdx-nitro/live/clients/dash/enc/r5nicrqiyf/out/v1/6659e5152b4e4bb89917f57640f594fb/cenc.mpd",
-        "Alpha - Akamai": "https://a96aivottlinear-a.akamaihd.net/OTTB/pdx-nitro/live/clients/dash/enc/r5nicrqiyf/out/v1/6659e5152b4e4bb89917f57640f594fb/cenc.mpd",
-        "Alpha - CF 1": "https://ss-ott.bia-cf.live.pv-cdn.net/pdx-nitro/live/clients/dash/enc/r5nicrqiyf/out/v1/6659e5152b4e4bb89917f57640f594fb/cenc.mpd",
-        "Alpha - CF 2": "https://dash-ott.bia-cf.live.pv-cdn.net/pdx-nitro/live/clients/dash/enc/r5nicrqiyf/out/v1/6659e5152b4e4bb89917f57640f594fb/cenc.mpd",
-        // Bravo Feed Servers
-        "Bravo - Amazon": "https://otte.cache.aiv-cdn.net/iad-nitro/live/clients/dash/enc/jiilpnzrrt/out/v1/fe73fae0c76146758ce185e49c411869/cenc.mpd",
-        "Bravo - Fistly": "https://otte.live.fly.ww.aiv-cdn.net/iad-nitro/live/clients/dash/enc/jiilpnzrrt/out/v1/fe73fae0c76146758ce185e49c411869/cenc.mpd",
-        "Bravo - Akamai": "https://a96aivottlinear-a.akamaihd.net/OTTB/iad-nitro/live/clients/dash/enc/jiilpnzrrt/out/v1/fe73fae0c76146758ce185e49c411869/cenc.mpd",
-        "Bravo - CF 1": "https://ss-ott.bia-cf.live.pv-cdn.net/iad-nitro/live/clients/dash/enc/jiilpnzrrt/out/v1/fe73fae0c76146758ce185e49c411869/cenc.mpd",
-        "Bravo - CF 2": "https://dash-ott.bia-cf.live.pv-cdn.net/iad-nitro/live/clients/dash/enc/jiilpnzrrt/out/v1/fe73fae0c76146758ce185e49c411869/cenc.mpd"
-      },
+      streamManifest: this.getAttribute('stream-url') || "https://otte.cache.aiv-cdn.net/pdx-nitro/live/clients/dash/enc/r5nicrqiyf/out/v1/6659e5152b4e4bb89917f57640f594fb/cenc.mpd",
       drmKeyId: "8e802e5373c59195ff0a9838814db6f4",
       drmKey: "d76ecf4be947c06874c1b57427f9e85b"
     };
@@ -48,7 +34,50 @@ class CricXCrateUI extends HTMLElement {
     this.PREVIEW_TIME = 5 * 60 * 1000;
     this.animationFrameId = null;
     this.stars = [];
-    this.shakaPlayer = null;
+
+    this.msgHandler = (e) => {
+      if (e.data === 'cricxcrate-fs-enter') {
+        const rig = this._shadow.getElementById('playerContainer');
+        if (rig) {
+          rig.classList.add('fs-active');
+          try {
+            if (rig.requestFullscreen) rig.requestFullscreen().catch(()=>{});
+            else if (rig.webkitRequestFullscreen) rig.webkitRequestFullscreen();
+            if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(()=>{});
+          } catch(err){}
+        }
+      } else if (e.data === 'cricxcrate-fs-exit') {
+        const rig = this._shadow.getElementById('playerContainer');
+        if (rig) {
+          rig.classList.remove('fs-active');
+          try {
+            if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+            else if (document.webkitFullscreenElement) document.webkitExitFullscreen();
+            if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+          } catch(err){}
+        }
+      }
+
+      if (e.data === 'cricxcrate-playing') {
+        if (!this.isStreamUnlocked && !this.lockTimer) {
+          this.lockTimer = setTimeout(() => this.triggerLock(), this.PREVIEW_TIME);
+        }
+      }
+    };
+
+    this.nativeFsHandler = () => {
+       const rig = this._shadow.getElementById('playerContainer');
+       if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+          if (rig) rig.classList.remove('fs-active');
+       }
+    };
+  }
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    if (name === 'stream-url' && oldValue !== newValue && newValue) {
+      this.CONFIG.streamManifest = newValue;
+      this.setupIframePlayer();
+    }
   }
 
   async connectedCallback() {
@@ -57,7 +86,11 @@ class CricXCrateUI extends HTMLElement {
     this.initWarpField();
     this.initThemeSwitching();
     this.initEventListeners();
-    this.initShakaPlayer();
+    this.setupIframePlayer();
+
+    window.addEventListener('message', this.msgHandler);
+    document.addEventListener('fullscreenchange', this.nativeFsHandler);
+    document.addEventListener('webkitfullscreenchange', this.nativeFsHandler);
 
     setTimeout(() => {
       const modal = this._shadow.getElementById('tgInitialModal');
@@ -68,7 +101,9 @@ class CricXCrateUI extends HTMLElement {
   disconnectedCallback() {
     if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     if (this.lockTimer) clearTimeout(this.lockTimer);
-    if (this.shakaPlayer) this.shakaPlayer.destroy();
+    window.removeEventListener('message', this.msgHandler);
+    document.removeEventListener('fullscreenchange', this.nativeFsHandler);
+    document.removeEventListener('webkitfullscreenchange', this.nativeFsHandler);
   }
   async render() {
     this._shadow.innerHTML = `
@@ -80,8 +115,10 @@ class CricXCrateUI extends HTMLElement {
         :host {
           --primary-rgb: 0, 255, 204;
           --secondary-rgb: 0, 150, 255;
+          --cyber-blue-rgb: 0, 240, 255;
           --accent: rgb(var(--primary-rgb));
           --accent-glow: rgba(var(--primary-rgb), 0.45);
+          --accent-glow-intense: rgba(var(--primary-rgb), 0.85);
           --bg-pure: #050a0f; 
           --bg-card: rgba(12, 18, 28, 0.72);
           --border-glass: rgba(0, 255, 204, 0.15);
@@ -120,53 +157,88 @@ class CricXCrateUI extends HTMLElement {
         .container { width: min(1500px, 92vw); margin: 0 auto; padding: 0 0 clamp(40px, 6vw, 100px); position: relative; z-index: 10; }
         .nav { height: clamp(64px, 8.5vh, 96px); display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 50; }
         .brand { display: inline-flex; align-items: center; gap: clamp(10px, 1.2vw, 16px); text-decoration: none; }
-        .brand-title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(20px, 2.2vw, 28px); font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: var(--heading-dynamic); }
+        .brand-title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(20px, 2.2vw, 28px); font-weight: 900; letter-spacing: 1px; text-transform: uppercase; color: var(--heading-dynamic); transition: color 0.25s ease; }
 
         .nav-actions { display: flex; align-items: center; gap: clamp(8px, 1vw, 14px); }
         .live-pill-badge { height: clamp(32px, 2.8vw, 40px); padding: 0 clamp(12px, 1.2vw, 16px); display: flex; align-items: center; gap: 6px; background: var(--bg-card); border: 1px solid var(--border-glass); backdrop-filter: blur(16px); border-radius: 100px; color: var(--text-muted); font-family: 'DM Mono', monospace; font-size: clamp(8px, 0.7vw, 10px); letter-spacing: 1.2px; text-transform: uppercase; }
         .pulsing-live-dot { width: 6px; height: 6px; background: #ff2a2a; border-radius: 50%; box-shadow: 0 0 12px #ff2a2a; animation: liveSignal 1.5s ease-in-out infinite; }
         @keyframes liveSignal { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.8); } }
         
-        .nav-join-btn { height: clamp(32px, 2.8vw, 40px); padding: 0 clamp(16px, 1.5vw, 24px); display: inline-flex; align-items: center; justify-content: center; border-radius: 100px; background: var(--btn-main-bg); color: var(--btn-main-text); text-decoration: none; font-family: 'Space Grotesk', sans-serif; font-size: clamp(10.5px, 0.85vw, 13px); font-weight: 800; letter-spacing: 1px; transition: all 0.3s ease; }
-        
+        .nav-join-btn { height: clamp(32px, 2.8vw, 40px); padding: 0 clamp(16px, 1.5vw, 24px); display: inline-flex; align-items: center; justify-content: center; border-radius: 100px; background: var(--btn-main-bg); color: var(--btn-main-text); text-decoration: none; font-family: 'Space Grotesk', sans-serif; font-size: clamp(10.5px, 0.85vw, 13px); font-weight: 800; letter-spacing: 1px; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        .nav-join-btn:hover { background: var(--accent); color: #000; box-shadow: 0 0 20px var(--accent-glow); transform: translateY(-2px); }
+
         .hero { position: relative; padding: clamp(20px, 3.5vw, 56px) 0 clamp(14px, 2.2vw, 36px); }
         .hero-tag { display: inline-flex; align-items: center; gap: 10px; font-family: 'Space Grotesk', sans-serif; color: var(--accent); font-size: clamp(12px, 1.1vw, 15px); font-weight: 800; letter-spacing: 3px; text-transform: uppercase; }
-        .hero-headline { margin-top: clamp(8px, 1.2vw, 18px); font-family: 'Syne', sans-serif; font-size: clamp(32px, 7.5vw, 100px); line-height: 0.88; letter-spacing: -0.06em; font-weight: 900; text-transform: uppercase; }
+        .hero-tag::before { content: ""; width: clamp(20px, 2.2vw, 34px); height: 2px; background: var(--accent); border-radius: 2px; }
+        .hero-headline { margin-top: clamp(8px, 1.2vw, 18px); font-family: 'Syne', sans-serif; font-size: clamp(36px, 8.5vw, 110px); line-height: 0.86; letter-spacing: -0.06em; font-weight: 900; text-transform: uppercase; }
         .hero-headline .accent-txt { color: var(--accent); background: linear-gradient(135deg, #00ffcc 0%, #0096ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .hero-details { margin-top: clamp(12px, 1.5vw, 22px); display: flex; align-items: center; flex-wrap: wrap; gap: clamp(6px, 0.9vw, 12px); color: var(--text-muted); font-family: 'DM Mono', monospace; font-size: clamp(8px, 0.7vw, 10px); letter-spacing: 1.4px; text-transform: uppercase; }
         .hero-details b { color: var(--text-main); font-weight: 600; }
         .meta-separator { width: 3px; height: 3px; border-radius: 50%; background: var(--text-dark); }
         .track-separator-beam { width: 100%; height: 1px; background: linear-gradient(90deg, var(--accent) 0%, var(--border-glass) 45%, transparent 100%); margin-bottom: clamp(14px, 1.6vw, 22px); }
 
-        .player-rig-box { width: 100%; aspect-ratio: 16/9; position: relative; background: #000; overflow: hidden; border-radius: clamp(14px, 1.8vw, 26px); border: 1px solid var(--border-glass-bright); box-shadow: var(--player-shadow); isolation: isolate; }
-        video#nativeVideoPlayer { width: 100%; height: 100%; object-fit: contain; display: block; border-radius: inherit; }
+        .player-rig-box { width: 100%; aspect-ratio: 16/9; position: relative; background: #000; overflow: hidden; border-radius: clamp(14px, 1.8vw, 26px); border: 1px solid var(--border-glass-bright); box-shadow: var(--player-shadow); isolation: isolate; transition: transform 0.4s ease; }
+        .player-rig-box:hover { transform: translateY(-5px); box-shadow: 0 55px 120px -10px rgba(0, 255, 204, 0.4); }
+        .player-rig-box::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.9; z-index: 12; pointer-events: none; }
         
-        .server-selector-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
-        .server-btn { background: var(--bg-card); border: 1px solid var(--border-glass); color: var(--text-muted); padding: 6px 12px; border-radius: 8px; font-family: 'Space Grotesk', sans-serif; font-size: 10px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; }
-        .server-btn.active { background: var(--accent); color: #000; border-color: var(--accent); box-shadow: 0 0 15px var(--accent-glow); }
-        .quality-select { background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-glass); padding: 6px 12px; border-radius: 8px; font-family: 'Space Grotesk', sans-serif; font-size: 10px; font-weight: 700; cursor: pointer; outline: none; }
-
-        .tg-modal-overlay { position: fixed; inset: 0; background: rgba(2, 4, 8, 0.92); backdrop-filter: blur(14px); z-index: 1000000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; }
+        iframe#player { width: 100%; height: 100%; border: none; display: block; position: relative; z-index: 5; border-radius: inherit; }
+        .player-rig-box.fs-active { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100dvh !important; max-width: none !important; max-height: none !important; z-index: 9999999 !important; border-radius: 0 !important; border: none !important; transform: none !important; background: #000 !important; }
+        
+        .tg-modal-overlay { position: fixed; inset: 0; background: rgba(2, 4, 8, 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); z-index: 1000000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
         .tg-modal-overlay.show { opacity: 1; pointer-events: all; }
-        .tg-modal-box { background: var(--bg-card); border: 1px solid var(--border-glass-bright); border-radius: 12px; padding: clamp(32px, 5vw, 48px); text-align: center; max-width: 440px; width: 90%; transform: scale(0.8) translateY(30px); opacity: 0; transition: all 0.6s ease; box-shadow: 0 40px 100px rgba(0, 0, 0, 0.9); }
+        .tg-modal-box { background: var(--bg-card); border: 1px solid var(--border-glass-bright); border-radius: 12px; padding: clamp(32px, 5vw, 48px); text-align: center; max-width: 440px; width: 90%; transform: scale(0.8) translateY(30px); opacity: 0; transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 40px 100px rgba(0, 0, 0, 0.9), inset 0 0 40px rgba(0, 255, 204, 0.08); }
         .tg-modal-overlay.show .tg-modal-box { transform: scale(1) translateY(0); opacity: 1; }
-        .tg-modal-icon { width: 72px; height: 72px; margin: 0 auto 20px; background: rgba(0, 255, 204, 0.1); border-radius: 16px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0, 255, 204, 0.3); }
-        .tg-modal-icon svg { width: 36px; height: 36px; fill: var(--accent); }
-        .tg-modal-title { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 8px; }
-        .tg-modal-desc { font-size: 14px; color: var(--text-muted); margin-bottom: 24px; }
-        .tg-modal-btn-join { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 54px; border-radius: 12px; background: linear-gradient(135deg, #00ffcc 0%, #0096ff 100%); color: #000; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 800; text-transform: uppercase; text-decoration: none; cursor: pointer; margin-bottom: 14px; }
-        .tg-modal-btn-joined { background: transparent; border: none; color: var(--text-muted); font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; cursor: pointer; }
-
-        .player-meta-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 2px 0; flex-wrap: wrap; }
-        .stream-title-group strong { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; }
-        .stream-title-group span { display: block; font-family: 'Space Grotesk', sans-serif; color: var(--text-muted); font-size: 10px; text-transform: uppercase; }
-        .share-action-btn { height: 42px; padding: 0 20px; display: inline-flex; align-items: center; gap: 8px; border-radius: 100px; background: var(--bg-card); border: 1px solid var(--accent); color: var(--text-main); font-family: 'Space Grotesk', sans-serif; font-size: 10px; font-weight: 700; cursor: pointer; }
         
-        .theme-switch-deck { position: fixed; right: 20px; top: 20px; z-index: 900; background: var(--bg-card); border: 1px solid var(--border-glass-bright); border-radius: 100px; padding: 4px; display: flex; gap: 4px; }
-        .mode-toggle-btn { height: 30px; padding: 0 10px; border: 0; background: transparent; color: var(--text-muted); font-size: 8px; border-radius: 100px; cursor: pointer; }
-        .mode-toggle-btn.active { background: var(--accent); color: #000; }
+        .tg-modal-icon { width: 72px; height: 72px; margin: 0 auto 20px; background: rgba(0, 255, 204, 0.1); border-radius: 16px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(0, 255, 204, 0.3); box-shadow: 0 0 25px rgba(0, 255, 204, 0.25); animation: pulseIcon 2s infinite ease-in-out; }
+        .tg-modal-icon svg { width: 36px; height: 36px; fill: var(--accent); }
+        @keyframes pulseIcon { 0%, 100% { transform: scale(1); box-shadow: 0 0 25px rgba(0, 255, 204, 0.25); } 50% { transform: scale(1.05); box-shadow: 0 0 35px rgba(0, 255, 204, 0.45); } }
+
+        .tg-modal-title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(22px, 2.5vw, 28px); font-weight: 800; color: #fff; margin-bottom: 8px; letter-spacing: -0.02em; }
+        .tg-modal-desc { font-size: clamp(13px, 1.1vw, 15px); color: var(--text-muted); line-height: 1.5; margin-bottom: 24px; }
+        
+        .tg-modal-btn-join { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 54px; border-radius: 12px; background: linear-gradient(135deg, #00ffcc 0%, #0096ff 100%); color: #000; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; text-decoration: none; transition: all 0.3s ease; box-shadow: 0 10px 30px rgba(0, 255, 204, 0.3); cursor: pointer; margin-bottom: 14px; }
+        .tg-modal-btn-join:hover { transform: translateY(-2px); box-shadow: 0 15px 40px rgba(0, 255, 204, 0.5); filter: brightness(1.1); }
+        
+        .tg-modal-btn-joined { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: none; color: var(--text-muted); font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; padding: 6px 12px; transition: color 0.2s ease; }
+        .tg-modal-btn-joined:hover { color: var(--accent); }
+
+        .player-meta-bar { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: clamp(14px, 1.6vw, 22px) 2px 0; flex-wrap: wrap; }
+        .stream-title-group { display: flex; flex-direction: column; gap: 4px; }
+        .stream-title-group strong { font-family: 'Space Grotesk', sans-serif; font-size: clamp(15px, 1.35vw, 20px); font-weight: 700; letter-spacing: -0.3px; }
+        .stream-title-group span { font-family: 'Space Grotesk', sans-serif; color: var(--text-muted); font-size: clamp(9px, 0.75vw, 11px); letter-spacing: 1.2px; font-weight: 600; text-transform: uppercase; }
+
+        .share-action-btn { height: clamp(38px, 3.2vw, 46px); padding: 0 clamp(18px, 1.8vw, 26px); display: inline-flex; align-items: center; gap: 8px; border-radius: 100px; background: linear-gradient(135deg, var(--bg-card) 0%, rgba(var(--primary-rgb), 0.16) 100%); border: 1px solid var(--accent); color: var(--text-main); font-family: 'Space Grotesk', sans-serif; font-size: clamp(9px, 0.75vw, 11px); font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; cursor: pointer; backdrop-filter: blur(16px); box-shadow: 0 6px 25px var(--accent-glow); transition: all 0.3s ease; }
+        .share-action-btn svg { width: 14px; height: 14px; stroke: var(--accent); stroke-width: 2.2; transition: stroke 0.3s ease; }
+        .share-action-btn:hover { background: var(--accent); color: #000; box-shadow: 0 10px 30px var(--accent-glow-intense); transform: translateY(-2px); }
+        .share-action-btn:hover svg { stroke: #000; }
+
+        .community { margin-top: clamp(48px, 7vw, 110px); position: relative; }
+        .community-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid var(--border-glass); }
+        .comm-tag { font-family: 'Space Grotesk', sans-serif; color: var(--accent); font-size: clamp(12px, 1.1vw, 15px); font-weight: 800; letter-spacing: 2px; text-transform: uppercase; }
+        .community-body { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: end; padding: clamp(24px, 3.5vw, 42px) 0; }
+        .comm-heading { font-family: 'Space Grotesk', sans-serif; font-size: clamp(28px, 4.8vw, 72px); line-height: 0.94; letter-spacing: -0.06em; font-weight: 700; max-width: 720px; }
+        .comm-heading span { color: var(--text-dark); }
+        
+        .comm-btn-prime { height: clamp(44px, 3.8vw, 54px); padding: 0 clamp(22px, 2.2vw, 34px); display: inline-flex; align-items: center; gap: 12px; border-radius: 100px; background: var(--btn-main-bg); color: var(--btn-main-text); text-decoration: none; font-family: 'Space Grotesk', sans-serif; font-size: clamp(11px, 0.85vw, 13px); font-weight: 800; letter-spacing: 1.1px; white-space: nowrap; transition: all 0.3s ease; }
+        .comm-btn-prime:hover { background: var(--accent); color: #000; box-shadow: 0 0 25px var(--accent-glow); transform: translateY(-2px); }
+
+        .footer { margin-top: clamp(44px, 6vw, 80px); border-top: 1px solid var(--border-glass); padding: 20px 0 calc(20px + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; color: var(--text-dark); font-family: 'Space Grotesk', sans-serif; font-size: clamp(8.5px, 0.7vw, 10.5px); letter-spacing: 1.2px; text-transform: uppercase; font-weight: 600; }
+        .footer strong { color: var(--text-muted); }
+
+        .theme-switch-deck { position: fixed; right: clamp(14px, 2vw, 28px); top: clamp(14px, 2vw, 28px); z-index: 900; background: var(--bg-card); border: 1px solid var(--border-glass-bright); border-radius: 100px; backdrop-filter: blur(24px); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4); padding: 4px; display: flex; align-items: center; gap: 4px; }
+        .mode-toggle-btn { height: clamp(28px, 2.2vw, 34px); padding: 0 clamp(8px, 0.9vw, 12px); display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--text-muted); font-family: 'DM Mono', monospace; font-size: clamp(7px, 0.6vw, 8.5px); font-weight: 500; letter-spacing: 1px; text-transform: uppercase; border-radius: 100px; cursor: pointer; transition: all 0.3s ease; }
+        .mode-toggle-btn i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; transition: all 0.3s ease; }
+        .mode-toggle-btn.active { background: var(--accent); color: #000; box-shadow: 0 0 15px var(--accent-glow); }
+        .mode-toggle-btn.active i { background: #000; }
+
+        @media (max-width: 680px) {
+          .live-pill-badge { display: none; }
+          .community-body { grid-template-columns: 1fr; gap: 18px; }
+          .comm-btn-prime { width: 100%; justify-content: center; }
+          .player-meta-bar { flex-direction: column; align-items: flex-start; }
+          .share-action-btn { width: 100%; justify-content: center; }
+        }
       </style>
-      
       <canvas id="warpGridCanvas"></canvas>
       <div class="container">
         <header class="nav">
@@ -181,59 +253,61 @@ class CricXCrateUI extends HTMLElement {
 
         <section class="hero">
           <div class="hero-tag">AFGHANISTAN VS INDIA 2026</div>
-          <h1 class="hero-headline">3RD T20I<br><span class="accent-txt">LIVE STREAM.</span></h1>
+          <h1 class="hero-headline">3RD T20I<br><span class="accent-txt">LIVE.</span></h1>
           <div class="hero-details">
-            <b>SECURE DASH</b><span class="meta-separator"></span>CLEARKEY DRM<span class="meta-separator"></span>LIVE NOW
+            <b>PREMIUM FEED</b><span class="meta-separator"></span>HD STREAM<span class="meta-separator"></span>LIVE NOW
           </div>
         </section>
 
         <main class="broadcast">
           <div class="track-separator-beam"></div>
 
-          <div class="server-selector-bar" id="serverBar">
-            <button class="server-btn active" data-server="Alpha - Amazon">Alpha - Amazon</button>
-            <button class="server-btn" data-server="Alpha - Fistly">Alpha - Fistly</button>
-            <button class="server-btn" data-server="Alpha - Akamai">Alpha - Akamai</button>
-            <button class="server-btn" data-server="Alpha - CF 1">Alpha - CF 1</button>
-            <button class="server-btn" data-server="Alpha - CF 2">Alpha - CF 2</button>
-            <button class="server-btn" data-server="Bravo - Amazon">Bravo - Amazon</button>
-            <button class="server-btn" data-server="Bravo - Fistly">Bravo - Fistly</button>
-            
-            <select class="quality-select" id="qualitySelect">
-              <option value="auto">Auto Quality</option>
-            </select>
-          </div>
-
           <div class="player-rig-box" id="playerContainer">
-            <video id="nativeVideoPlayer" controls autoplay playsinline crossorigin="anonymous"></video>
+            <iframe id="player" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"></iframe>
           </div>
 
           <div class="player-meta-bar">
             <div class="stream-title-group">
               <strong>Afghanistan vs India · 3rd T20I Live</strong>
-              <span>CricxCrate Multi-CDN & DRM Suite</span>
+              <span>CricxCrate Exclusive Access</span>
             </div>
-            <button class="share-action-btn" id="btnShare">SHARE STREAM</button>
+            <button class="share-action-btn" id="btnShare">
+              <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+              <span id="shareBtnText">SHARE STREAM</span>
+            </button>
           </div>
         </main>
 
-        <div class="tg-modal-overlay" id="tgInitialModal">
-          <div class="tg-modal-box">
-            <div class="tg-modal-icon">
-              <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.11.03-1.84 1.18-5.21 3.45-.49.33-.94.49-1.35.48-.45-.01-1.31-.25-1.95-.46-.79-.26-1.42-.4-1.36-.84.03-.23.35-.47.96-.73 3.77-1.64 6.29-2.73 7.55-3.25 3.59-1.49 4.33-1.75 4.81-1.76.11 0 .35.03.48.14.11.09.14.22.15.34-.01.07-.01.19-.02.26z"/></svg>
-            </div>
-            <h3 class="tg-modal-title">Join Channel</h3>
-            <p class="tg-modal-desc">Join our Telegram channel to unlock continuous streaming links.</p>
-            <a class="tg-modal-btn-join" id="tgJoinBtn" href="${this.CONFIG.telegramLink}" target="_blank" rel="noopener">JOIN CHANNEL</a>
-            <button class="tg-modal-btn-joined" id="tgJoinedBtn">I've joined</button>
+        <section class="community">
+          <div class="community-header"><div class="comm-tag">CRICXCRATE</div></div>
+          <div class="community-body">
+            <h2 class="comm-heading">Stay connected.<br><span>Never miss a match.</span></h2>
+            <a class="comm-btn-prime" href="${this.CONFIG.telegramLink}" target="_blank" rel="noopener">JOIN COMMUNITY</a>
           </div>
-        </div>
+        </section>
 
-        <aside class="theme-switch-deck">
-          <button class="mode-toggle-btn active" id="themeDarkBtn">Obsidian</button>
-          <button class="mode-toggle-btn" id="themeLightBtn">Ceramic</button>
-        </aside>
+        <footer class="footer">
+          <span>© 2026 <strong>CRICXCRATE</strong></span>
+          <span>AFG vs IND · NEON SUITE PRO</span>
+        </footer>
       </div>
+
+      <div class="tg-modal-overlay" id="tgInitialModal">
+        <div class="tg-modal-box">
+          <div class="tg-modal-icon">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.19-.08-.05-.19-.02-.27 0-.11.03-1.84 1.18-5.21 3.45-.49.33-.94.49-1.35.48-.45-.01-1.31-.25-1.95-.46-.79-.26-1.42-.4-1.36-.84.03-.23.35-.47.96-.73 3.77-1.64 6.29-2.73 7.55-3.25 3.59-1.49 4.33-1.75 4.81-1.76.11 0 .35.03.48.14.11.09.14.22.15.34-.01.07-.01.19-.02.26z"/></svg>
+          </div>
+          <h3 class="tg-modal-title">Join Channel</h3>
+          <p class="tg-modal-desc">Join for streaming links</p>
+          <a class="tg-modal-btn-join" id="tgJoinBtn" href="${this.CONFIG.telegramLink}" target="_blank" rel="noopener">JOIN CHANNEL</a>
+          <button class="tg-modal-btn-joined" id="tgJoinedBtn">I've joined</button>
+        </div>
+      </div>
+
+      <aside class="theme-switch-deck">
+        <button class="mode-toggle-btn active" id="themeDarkBtn"><i></i> Obsidian</button>
+        <button class="mode-toggle-btn" id="themeLightBtn"><i></i> Ceramic</button>
+      </aside>
     `;
   }
   checkUnlockStatus() {
@@ -249,8 +323,12 @@ class CricXCrateUI extends HTMLElement {
 
   triggerLock() {
     if (this.isStreamUnlocked) return;
-    const video = this._shadow.getElementById('nativeVideoPlayer');
-    if (video) video.pause();
+    const iframe = this._shadow.getElementById('player');
+    if (iframe && iframe.contentWindow) iframe.contentWindow.postMessage('cricxcrate-force-pause', '*');
+    try {
+      if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+      else if (document.webkitFullscreenElement) document.webkitExitFullscreen();
+    } catch(err){}
     this._shadow.getElementById('tgInitialModal').classList.add('show');
   }
 
@@ -258,108 +336,131 @@ class CricXCrateUI extends HTMLElement {
     localStorage.setItem('cricxcrate_unlocked_time', Date.now().toString());
     this.isStreamUnlocked = true;
     this._shadow.getElementById('tgInitialModal').classList.remove('show');
-    const video = this._shadow.getElementById('nativeVideoPlayer');
-    if (video) video.play().catch(()=>{});
+    const iframe = this._shadow.getElementById('player');
+    if (iframe && iframe.contentWindow) iframe.contentWindow.postMessage('cricxcrate-force-play', '*');
   }
 
   initEventListeners() {
     const btnShare = this._shadow.getElementById("btnShare");
+    const shareBtnText = this._shadow.getElementById("shareBtnText");
     const tgJoinBtn = this._shadow.getElementById("tgJoinBtn");
     const tgJoinedBtn = this._shadow.getElementById("tgJoinedBtn");
 
     tgJoinBtn.addEventListener("click", () => this.unlockStream());
     tgJoinedBtn.addEventListener("click", () => this.unlockStream());
 
-    const serverButtons = this._shadow.querySelectorAll('.server-btn');
-    serverButtons.forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        serverButtons.forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        const serverName = e.target.getAttribute('data-server');
-        this.switchServer(serverName);
-      });
-    });
-
-    const qualitySelect = this._shadow.getElementById('qualitySelect');
-    qualitySelect.addEventListener('change', (e) => {
-      const val = e.target.value;
-      if (this.shakaPlayer) {
-        if (val === 'auto') {
-          this.shakaPlayer.configure({ abr: { enabled: true } });
-        } else {
-          this.shakaPlayer.configure({ abr: { enabled: false } });
-          const tracks = this.shakaPlayer.getVariantTracks();
-          const target = tracks.find(t => t.height === parseInt(val));
-          if (target) this.shakaPlayer.selectVariantTrack(target, true);
-        }
-      }
-    });
-
     btnShare.addEventListener("click", async () => {
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(window.location.href);
-        btnShare.textContent = "COPIED!";
-        setTimeout(() => { btnShare.textContent = "SHARE STREAM"; }, 1800);
-      }
-    });
-  }
-
-  async initShakaPlayer() {
-    const video = this._shadow.getElementById('nativeVideoPlayer');
-    shaka.polyfill.install_all();
-    if (!shaka.Player.isBrowserSupported()) return;
-
-    this.shakaPlayer = new shaka.Player(video);
-    this.shakaPlayer.configure({
-      drm: {
-        clearKeys: {
-          [this.CONFIG.drmKeyId]: this.CONFIG.drmKey
+      const shareData = {
+        title: "CRICXCRATE — AFG vs IND",
+        text: "Watch Afghanistan vs India live on CRICXCRATE!",
+        url: window.location.href
+      };
+      try {
+        if (navigator.share && /mobile|android|iphone|ipad|tablet/i.test(navigator.userAgent)) {
+          await navigator.share(shareData);
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(window.location.href);
+          const originalText = shareBtnText.textContent;
+          shareBtnText.textContent = "COPIED!";
+          setTimeout(() => { shareBtnText.textContent = originalText; }, 1800);
         }
-      }
+      } catch (err) {}
     });
-
-    this.shakaPlayer.addEventListener('error', (e) => console.error('Shaka Error:', e.detail));
-
-    video.addEventListener('playing', () => {
-      if (!this.isStreamUnlocked && !this.lockTimer) {
-        this.lockTimer = setTimeout(() => this.triggerLock(), this.PREVIEW_TIME);
-      }
-    });
-
-    await this.loadStreamUrl(this.CONFIG.servers["Alpha - Amazon"]);
   }
 
-  async loadStreamUrl(url) {
-    try {
-      await this.shakaPlayer.load(url);
-      console.log('Stream loaded successfully!');
-      this.populateQualities();
-    } catch (e) {
-      console.error('Failed to load stream:', e);
-    }
-  }
+  setupIframePlayer() {
+    const iframe = this._shadow.getElementById('player');
+    const streamUrl = this.CONFIG.streamManifest;
+    const kid = this.CONFIG.drmKeyId;
+    const key = this.CONFIG.drmKey;
 
-  async switchServer(serverName) {
-    const url = this.CONFIG.servers[serverName];
-    if (url && this.shakaPlayer) {
-      await this.loadStreamUrl(url);
-    }
-  }
+    iframe.srcdoc = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <style>
+          body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+          video { width: 100%; height: 100%; object-fit: contain; }
+          :root { --plyr-color-main: #00ffcc; --plyr-video-control-background-hover: rgba(0, 255, 204, 0.2); }
+        </style>
+        <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.5/shaka-player.compiled.js"><\/script>
+        <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"><\/script>
+      </head>
+      <body>
+        <video id="vid" controls crossorigin playsinline></video>
+        <script>
+          document.addEventListener('DOMContentLoaded', async () => {
+            const video = document.getElementById('vid');
+            const source = '${streamUrl}';
+            let playerInstance = null;
+            
+            function initPlyrAndOrientation(shakaInstance) {
+              playerInstance = new Plyr(video, { 
+                autoplay: true,
+                controls: ['play', 'progress', 'current-time', 'mute', 'volume', 'settings', 'fullscreen'],
+                settings: ['quality', 'speed'],
+                fullscreen: { enabled: true, fallback: true, iosNative: true }
+              });
+              
+              playerInstance.on('playing', () => window.parent.postMessage('cricxcrate-playing', '*'));
+              playerInstance.on('enterfullscreen', () => window.parent.postMessage('cricxcrate-fs-enter', '*'));
+              playerInstance.on('exitfullscreen', () => window.parent.postMessage('cricxcrate-fs-exit', '*'));
 
-  populateQualities() {
-    const tracks = this.shakaPlayer.getVariantTracks();
-    const qualitySelect = this._shadow.getElementById('qualitySelect');
-    qualitySelect.innerHTML = '<option value="auto">Auto Quality</option>';
-    
-    const videoTracks = tracks.filter(t => t.type === 'variant' && t.height);
-    const uniqueHeights = [...new Set(videoTracks.map(t => t.height))].sort((a, b) => b - a);
+              // Setup Shaka Quality Selector inside Plyr settings
+              const tracks = shakaInstance.getVariantTracks();
+              const videoTracks = tracks.filter(t => t.type === 'variant' && t.height);
+              if(videoTracks.length > 0) {
+                const uniqueHeights = [...new Set(videoTracks.map(t => t.height))].sort((a, b) => b - a);
+                playerInstance.options.quality = {
+                  default: uniqueHeights[0],
+                  options: uniqueHeights,
+                  forced: true,
+                  onChange: (newQuality) => {
+                    if (newQuality === 'auto') {
+                      shakaInstance.configure({ abr: { enabled: true } });
+                    } else {
+                      shakaInstance.configure({ abr: { enabled: false } });
+                      const target = tracks.find(t => t.height === parseInt(newQuality));
+                      if (target) shakaInstance.selectVariantTrack(target, true);
+                    }
+                  }
+                };
+              }
+              
+              video.play().catch(()=>{});
+            }
 
-    uniqueHeights.forEach(height => {
-      const option = document.createElement('option');
-      option.value = height;
-      option.textContent = `${height}p`;
-      qualitySelect.appendChild(option);
-    });
+            window.addEventListener('message', (e) => {
+              if (e.data === 'cricxcrate-force-pause' && playerInstance) playerInstance.pause();
+              if (e.data === 'cricxcrate-force-play' && playerInstance) playerInstance.play();
+            });
+
+            shaka.polyfill.install_all();
+            if (shaka.Player.isBrowserSupported()) {
+              const player = new shaka.Player(video);
+              player.configure({
+                drm: {
+                  clearKeys: {
+                    '${kid}': '${key}'
+                  }
+                }
+              });
+
+              player.addEventListener('error', (err) => console.error('Shaka Error:', err.detail));
+
+              try {
+                await player.load(source);
+                initPlyrAndOrientation(player);
+              } catch (e) {
+                console.error('Error loading manifest:', e);
+              }
+            }
+          });
+        <\/script>
+      </body>
+      </html>
+    `;
   }
 
   initWarpField() {
