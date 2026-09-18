@@ -18,14 +18,14 @@ export default {
     }
 
     const forwardHeaders = new Headers();
-    // SonyLiv requires standard browser headers and sonyliv origin
     forwardHeaders.set("User-Agent", request.headers.get("User-Agent") || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
     forwardHeaders.set("Referer", "https://www.sonyliv.com/");
     forwardHeaders.set("Origin", "https://www.sonyliv.com/");
 
     try {
       const targetUrlObj = new URL(targetUrl);
-      const searchParams = targetUrlObj.search; // Captures the Akamai ?hdnea= token
+      // Explicitly extract the Akamai token
+      const hdneaToken = targetUrlObj.searchParams.get("hdnea");
 
       const response = await fetch(targetUrl, {
         method: request.method,
@@ -44,25 +44,24 @@ export default {
             const trimmed = line.trim();
             if (!trimmed) return "";
 
-            // Handle DRM Keys
+            // Inject token into DRM Keys
             if (trimmed.startsWith("#EXT-X-KEY:") && trimmed.includes('URI="')) {
               const uriMatch = trimmed.match(/URI="(.*?)"/);
               if (uriMatch && uriMatch[1]) {
                 try {
-                  let absoluteUrl = new URL(uriMatch[1], targetUrl).href;
-                  if (!absoluteUrl.includes('?') && searchParams) absoluteUrl += searchParams;
-                  return trimmed.replace(uriMatch[1], `${url.origin}/?url=${encodeURIComponent(absoluteUrl)}`);
+                  let innerUrl = new URL(uriMatch[1], targetUrl);
+                  if (hdneaToken) innerUrl.searchParams.set("hdnea", hdneaToken);
+                  return trimmed.replace(uriMatch[1], `${url.origin}/?url=${encodeURIComponent(innerUrl.href)}`);
                 } catch(e) { return trimmed; }
               }
             }
 
-            // Handle standard internal links (.m3u8 or .ts)
+            // Inject token into internal chunklists and video segments
             if (!trimmed.startsWith("#")) {
               try {
-                let absoluteUrl = new URL(trimmed, targetUrl).href;
-                // Inject the Akamai token if it's missing from the chunk
-                if (!absoluteUrl.includes('?') && searchParams) absoluteUrl += searchParams;
-                return `${url.origin}/?url=${encodeURIComponent(absoluteUrl)}`;
+                let innerUrl = new URL(trimmed, targetUrl);
+                if (hdneaToken) innerUrl.searchParams.set("hdnea", hdneaToken);
+                return `${url.origin}/?url=${encodeURIComponent(innerUrl.href)}`;
               } catch (e) {
                 return line;
               }
@@ -81,6 +80,7 @@ export default {
         });
       }
 
+      // Pass through binary video chunks (.ts)
       const mediaResponse = new Response(response.body, response);
       mediaResponse.headers.set("Access-Control-Allow-Origin", "*");
       return mediaResponse;
