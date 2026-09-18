@@ -86,9 +86,10 @@ export default {
     }
 
     const forwardHeaders = new Headers();
-    forwardHeaders.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    forwardHeaders.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
     forwardHeaders.set("Referer", "https://www.sonyliv.com/");
     forwardHeaders.set("Origin", "https://www.sonyliv.com");
+    forwardHeaders.set("Accept", "*/*");
 
     try {
       const response = await fetch(targetUrl, {
