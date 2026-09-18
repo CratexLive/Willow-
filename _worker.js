@@ -1,119 +1,123 @@
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const targetUrlParam = url.searchParams.get('url');
+    const targetUrl = url.searchParams.get("url");
 
-    // Agar URL parameter nahi hai, toh built-in HTML player dikhao
-    if (!targetUrlParam) {
+    if (!targetUrl) {
       const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HLS Player</title>
+    <title>Sony Live Player</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <style>
-        body { margin: 0; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #fff; }
-        video { width: 100%; max-height: 85vh; }
-        .input-box { margin-bottom: 15px; display: flex; gap: 10px; width: 90%; max-width: 600px; }
-        input { flex: 1; padding: 10px; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px; }
-        button { padding: 10px 20px; background: #e50914; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        body { margin: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .player-wrapper { width: 100%; max-width: 800px; }
     </style>
 </head>
 <body>
-    <div class="input-box">
-        <input type="text" id="streamUrl" placeholder="Paste .m3u8 URL here...">
-        <button onclick="playStream()">Play</button>
+    <div class="player-wrapper">
+        <video id="player" controls crossorigin playsinline muted></video>
     </div>
-    <video id="video" controls autoplay></video>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15"></script>
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
-        function playStream() {
-            const rawUrl = document.getElementById('streamUrl').value.trim();
-            if (!rawUrl) return;
-            const proxyUrl = window.location.origin + '/?url=' + encodeURIComponent(rawUrl);
-            const video = document.getElementById('video');
-            
-            if (Hls.isSupported()) {
-                const hls = new Hls();
-                hls.loadSource(proxyUrl);
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = proxyUrl;
-                video.addEventListener('loadedmetadata', () => video.play());
-            }
+        const video = document.getElementById('player');
+        // Yahan apni Sony wali m3u8 link daal sakte hain
+        const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2094590/cricodi1809/TAM/std_lrh-800300010.m3u8?hdnea=exp=1789747035~acl=/*~id=85257464605952000924575211579778~hmac=94e2175eab0b98450236e44060c28f2045535837604668e0ebfc193418355714";
+        
+        const source = \`\${window.location.origin}/?url=\${encodeURIComponent(streamUrl)}\`;
+
+        if (Hls.isSupported()) {
+            const hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 30
+            });
+            hls.loadSource(source);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                const player = new Plyr(video, {
+                    autoplay: true,
+                    controls: ['play-large', 'play', 'mute', 'volume', 'settings', 'fullscreen']
+                });
+                player.play();
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = source;
+            video.addEventListener('loadedmetadata', () => {
+                const player = new Plyr(video, { autoplay: true });
+                player.play();
+            });
         }
     </script>
 </body>
 </html>`;
       return new Response(html, {
-        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+        headers: { "Content-Type": "text/html;charset=UTF-8" }
       });
     }
 
-    let targetUrl;
-    try {
-      targetUrl = new URL(targetUrlParam);
-    } catch (e) {
-      return new Response('Invalid URL', { status: 400 });
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+          "Access-Control-Allow-Headers": "*",
+        },
+      });
     }
 
-    const newHeaders = new Headers(request.headers);
-    newHeaders.set('Host', targetUrl.host);
-
-    const modifiedRequest = new Request(targetUrl.toString(), {
-      headers: newHeaders,
-      method: request.method,
-      body: request.body,
-      redirect: 'follow'
-    });
+    // Sony ke liye headers adjust kiye gaye hain
+    const forwardHeaders = new Headers();
+    forwardHeaders.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+    forwardHeaders.set("Referer", "https://www.sonyliv.com/");
+    forwardHeaders.set("Origin", "https://www.sonyliv.com");
 
     try {
-      const response = await fetch(modifiedRequest);
-      const contentType = response.headers.get('content-type') || '';
+      const response = await fetch(targetUrl, {
+        method: request.method,
+        headers: forwardHeaders,
+      });
 
-      if (contentType.includes('application/vnd.apple.mpegurl') || contentType.includes('application/x-mpegURL') || targetUrl.pathname.endsWith('.m3u8')) {
-        let body = await response.text();
-        const workerBase = `${url.protocol}//${url.host}/?url=`;
+      const contentType = response.headers.get("content-type"] || "";
+      const isManifest = contentType.includes("mpegurl") || targetUrl.includes(".m3u8");
 
-        const lines = body.split('\n');
-        const rewrittenLines = lines.map(line => {
-          line = line.trim();
-          if (!line || line.startsWith('#')) {
-            if (line.includes('URI="')) {
-              return line.replace(/URI="(.*?)"/, (match, p1) => {
-                let absoluteUri = p1.startsWith('http') ? p1 : new URL(p1, targetUrl.href).toString();
-                return `URI="${workerBase}${encodeURIComponent(absoluteUri)}"`;
-              });
+      if (isManifest) {
+        const manifestText = await response.text();
+        
+        const rewrittenManifest = manifestText
+          .split("\n")
+          .map((line) => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith("#")) {
+              try {
+                const absoluteUrl = new URL(trimmed, targetUrl).href;
+                return `${url.origin}/?url=${encodeURIComponent(absoluteUrl)}`;
+              } catch (e) {
+                return line;
+              }
             }
             return line;
-          }
-          let absoluteSegmentUrl = line.startsWith('http') ? line : new URL(line, targetUrl.href).toString();
-          return `${workerBase}${encodeURIComponent(absoluteSegmentUrl)}`;
-        });
+          })
+          .join("\n");
 
-        const newBody = rewrittenLines.join('\n');
-        const newResponseHeaders = new Headers(response.headers);
-        newResponseHeaders.set('Access-Control-Allow-Origin', '*');
-
-        return new Response(newBody, {
+        return new Response(rewrittenManifest, {
           status: response.status,
-          statusText: response.statusText,
-          headers: newResponseHeaders
+          headers: {
+            "Content-Type": "application/vnd.apple.mpegurl",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-store",
+          },
         });
       }
 
-      const newResponseHeaders = new Headers(response.headers);
-      newResponseHeaders.set('Access-Control-Allow-Origin', '*');
-
-      return new Response(response.body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: newResponseHeaders
-      });
-
+      const mediaResponse = new Response(response.body, response);
+      mediaResponse.headers.set("Access-Control-Allow-Origin", "*");
+      return mediaResponse;
     } catch (err) {
-      return new Response('Proxy Error: ' + err.message, { status: 500 });
+      return new Response(err.message, { status: 500 });
     }
-  }
+  },
 };
