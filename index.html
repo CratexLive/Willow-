@@ -3,24 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sony Live Stream Player</title>
+    <title>Minimal Test Player</title>
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <style>
-        body { 
-            margin: 0; 
-            background-color: #0b0b0b; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-        }
-        .player-wrapper { 
-            width: 100%; 
-            max-width: 900px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            border-radius: 8px;
-            overflow: hidden;
-        }
+        body { margin: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .player-wrapper { width: 100%; max-width: 850px; }
     </style>
 </head>
 <body>
@@ -31,36 +18,29 @@
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15"></script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const video = document.getElementById('player');
-            const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2094590/cricodi1809/TAM/std_lrh-800300010.m3u8?hdnea=exp=1789747035~acl=/*~id=85257464605952000924575211579778~hmac=94e2175eab0b98450236e44060c28f2045535837604668e0ebfc193418355714";
-            const source = window.location.origin + '/?url=' + encodeURIComponent(streamUrl);
+        const video = document.getElementById('player');
+        
+        const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2105080/cricodi1809/ENG/std_lrh-800300010.m3u8?hdnea=exp=1789748248~acl=/*~id=63871454992077383887033024065699~hmac=b774bd7a68917cec89235bada851c74402c6381b6f3b9bf2c28f16977d510686";
+        const source = `/?url=${encodeURIComponent(streamUrl)}`;
 
-            if (Hls.isSupported()) {
-                const hls = new Hls({
-                    enableWorker: true,
-                    lowLatencyMode: true,
-                    backBufferLength: 30
-                });
-
-                hls.loadSource(source);
-                hls.attachMedia(video);
-                
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    const player = new Plyr(video, {
-                        autoplay: true,
-                        controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'fullscreen']
-                    });
-                    video.play().catch(() => {});
-                });
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = source;
-                video.addEventListener('loadedmetadata', () => {
-                    const player = new Plyr(video, { autoplay: true });
-                    video.play();
-                });
-            }
-        });
+        if (Hls.isSupported()) {
+            const hls = new Hls({ 
+                enableWorker: true, 
+                lowLatencyMode: true 
+            });
+            
+            hls.loadSource(source);
+            hls.attachMedia(video);
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                new Plyr(video, { autoplay: true }).play();
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = source;
+            video.addEventListener('loadedmetadata', () => {
+                new Plyr(video, { autoplay: true }).play();
+            });
+        }
     </script>
 </body>
 </html>
