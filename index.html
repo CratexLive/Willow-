@@ -3,31 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HLS Player</title>
+    <title>Sony Live Player</title>
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <style>
-        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        video { width: 100%; max-height: 100vh; }
+        body { margin: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .player-wrapper { width: 100%; max-width: 800px; }
     </style>
 </head>
 <body>
-    <video id="video" controls autoplay></video>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <div class="player-wrapper">
+        <video id="player" controls crossorigin playsinline muted></video>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15"></script>
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
-        const video = document.getElementById('video');
-        const targetStreamUrl = "https://sonydaimenew.akamaized.net/hls/live/2094590/cricodi1809/TAM/std_lrh-800300010.m3u8?hdnea=exp=1789747035~acl=/*~id=85257464605952000924575211579778~hmac=94e2175eab0b98450236e44060c28f2045535837604668e0ebfc193418355714";
-        const proxyUrl = `${window.location.origin}/?url=${encodeURIComponent(targetStreamUrl)}`;
+        const video = document.getElementById('player');
+        const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2094590/cricodi1809/TAM/std_lrh-800300010.m3u8?hdnea=exp=1789747035~acl=/*~id=85257464605952000924575211579778~hmac=94e2175eab0b98450236e44060c28f2045535837604668e0ebfc193418355714";
+        
+        const source = `${window.location.origin}/?url=${encodeURIComponent(streamUrl)}`;
 
         if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(proxyUrl);
+            const hls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 30
+            });
+
+            hls.loadSource(source);
             hls.attachMedia(video);
+            
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                video.play();
+                const player = new Plyr(video, {
+                    autoplay: true,
+                    controls: ['play-large', 'play', 'mute', 'volume', 'settings', 'fullscreen']
+                });
+                player.play();
             });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = proxyUrl;
+            video.src = source;
             video.addEventListener('loadedmetadata', () => {
-                video.play();
+                const player = new Plyr(video, { autoplay: true });
+                player.play();
             });
         }
     </script>
