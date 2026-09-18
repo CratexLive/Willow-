@@ -24,7 +24,6 @@
     </style>
 </head>
 <body>
-
     <div class="player-wrapper">
         <video id="player" controls crossorigin playsinline muted></video>
     </div>
@@ -34,10 +33,8 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const video = document.getElementById('player');
-            
-            // Aapka Sony wala m3u8 URL jo proxy ke through route hoga
             const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2094590/cricodi1809/TAM/std_lrh-800300010.m3u8?hdnea=exp=1789747035~acl=/*~id=85257464605952000924575211579778~hmac=94e2175eab0b98450236e44060c28f2045535837604668e0ebfc193418355714";
-            const source = `${window.location.origin}/?url=${encodeURIComponent(streamUrl)}`;
+            const source = window.location.origin + '/?url=' + encodeURIComponent(streamUrl);
 
             if (Hls.isSupported()) {
                 const hls = new Hls({
@@ -54,34 +51,9 @@
                         autoplay: true,
                         controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'fullscreen']
                     });
-                    
-                    // User interaction ke baad audio un-mute karne ke liye optional handler
-                    video.play().catch(() => {
-                        console.log("Autoplay blocked, user interaction required.");
-                    });
+                    video.play().catch(() => {});
                 });
-
-                hls.on(Hls.Events.ERROR, (event, data) => {
-                    if (data.fatal) {
-                        switch (data.type) {
-                            case Hls.ErrorTypes.NETWORK_ERROR:
-                                console.error("Network error encountered, trying to recover...");
-                                hls.startLoad();
-                                break;
-                            case Hls.ErrorTypes.MEDIA_ERROR:
-                                console.error("Media error encountered, trying to recover...");
-                                hls.recoverMediaError();
-                                break;
-                            default:
-                                console.error("Unrecoverable error, stopping HLS.");
-                                hls.destroy();
-                                break;
-                        }
-                    }
-                });
-
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // Safari / iOS native HLS support
                 video.src = source;
                 video.addEventListener('loadedmetadata', () => {
                     const player = new Plyr(video, { autoplay: true });
