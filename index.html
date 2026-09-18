@@ -19,12 +19,9 @@
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
         const video = document.getElementById('player');
-        
-        // Ensure you paste the LATEST SonyLiv link here (the token in this one expires at 10:07 PM IST)
         const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2105079/cricodi1809/HIN/std_lrh-800300010.m3u8?hdnea=exp=1789749461~acl=/*~id=58385575493512869088749323581865~hmac=ece70a90be50a345ad627087cdd87589b83bc3829a53b6494a8f62e39d4d0ab2";
         
-        // Properly format the dynamic proxy URL
-        const sourceUrl = window.location.origin + "/?url=" + encodeURIComponent(streamUrl);
+        const sourceUrl = window.location.origin + "/api/proxy?url=" + encodeURIComponent(streamUrl);
 
         if (Hls.isSupported()) {
             const hls = new Hls({
