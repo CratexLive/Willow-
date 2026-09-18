@@ -3,8 +3,9 @@ export default {
     const url = new URL(request.url);
     const targetUrlParam = url.searchParams.get('url');
 
+    // Agar 'url' parameter nahi hai, toh static file (index.html) serve karo
     if (!targetUrlParam) {
-      return new Response('Missing "url" parameter', { status: 400 });
+      return env.ASSETS.fetch(request);
     }
 
     let targetUrl;
