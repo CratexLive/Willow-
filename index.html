@@ -3,42 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minimal Test Player</title>
+    <title>Live Match Player - Hindi</title>
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.3.0/dist/hls.min.js"></script>
+    <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
     <style>
-        body { margin: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .player-wrapper { width: 100%; max-width: 850px; }
+        body {
+            background-color: #000;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.8);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        video {
+            width: 100%;
+        }
     </style>
 </head>
 <body>
-    <div class="player-wrapper">
-        <video id="player" controls crossorigin playsinline muted></video>
+
+    <div class="container">
+        <video id="player" controls playsinline></video>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15"></script>
-    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
-        const video = document.getElementById('player');
+        const videoElement = document.getElementById('player');
         
-        const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2105080/cricodi1809/ENG/std_lrh-800300010.m3u8?hdnea=exp=1789748248~acl=/*~id=63871454992077383887033024065699~hmac=b774bd7a68917cec89235bada851c74402c6381b6f3b9bf2c28f16977d510686";
-        const source = `/?url=${encodeURIComponent(streamUrl)}`;
+        // The raw stream URL
+        const rawUrl = "https://sonydaimenew.akamaized.net/hls/live/2105079/cricodi1809/HIN/std_lrh-800300010.m3u8?hdnea=exp=1789749461~acl=/*~id=58385575493512869088749323581865~hmac=ece70a90be50a345ad627087cdd87589b83bc3829a53b6494a8f62e39d4d0ab2";
+        
+        // Routes the request through your Cloudflare Pages _worker.js dynamically
+        const sourceUrl = window.location.origin + "/?url=" + encodeURIComponent(rawUrl);
+
+        const plyrOptions = {
+            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen']
+        };
 
         if (Hls.isSupported()) {
-            const hls = new Hls({ 
-                enableWorker: true, 
-                lowLatencyMode: true 
+            const hls = new Hls({
+                debug: false
             });
-            
-            hls.loadSource(source);
-            hls.attachMedia(video);
-            
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                new Plyr(video, { autoplay: true }).play();
+            hls.loadSource(sourceUrl);
+            hls.attachMedia(videoElement);
+            hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                new Plyr(videoElement, plyrOptions);
+                videoElement.play().catch(() => {});
             });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = source;
-            video.addEventListener('loadedmetadata', () => {
-                new Plyr(video, { autoplay: true }).play();
+        } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+            videoElement.src = sourceUrl;
+            new Plyr(videoElement, plyrOptions);
+            videoElement.addEventListener('loadedmetadata', function () {
+                videoElement.play().catch(() => {});
             });
         }
     </script>
