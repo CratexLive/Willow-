@@ -1,69 +1,68 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Match Player - Hindi</title>
-    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.3.0/dist/hls.min.js"></script>
-    <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
-    <style>
-        body {
-            background-color: #000;
-            margin: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .container {
-            width: 100%;
-            max-width: 900px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.8);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        video {
-            width: 100%;
-        }
-    </style>
-</head>
-<body>
+export default {
+  async fetch(request, env, ctx) {
+    const url = new URL(request.url);
+    const targetUrl = url.searchParams.get("url");
 
-    <div class="container">
-        <video id="player" controls playsinline></video>
-    </div>
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "*",
+        },
+      });
+    }
 
-    <script>
-        const videoElement = document.getElementById('player');
+    // Serve the index.html file if no proxy URL is requested
+    if (!targetUrl) {
+      return env.ASSETS.fetch(request);
+    }
+
+    try {
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": request.headers.get("User-Agent") || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+          "Referer": "https://www.sonyliv.com/",
+          "Origin": "https://www.sonyliv.com/"
+        }
+      });
+
+      let body = response.body;
+      const responseHeaders = new Headers(response.headers);
+      
+      responseHeaders.set("Access-Control-Allow-Origin", "*");
+      responseHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, POST, OPTIONS");
+      responseHeaders.set("Access-Control-Allow-Headers", "*");
+
+      if (targetUrl.includes(".m3u8")) {
+        const text = await response.text();
+        const targetUrlObj = new URL(targetUrl);
+        const basePath = targetUrl.substring(0, targetUrl.lastIndexOf("/") + 1);
         
-        // The raw stream URL
-        const rawUrl = "https://sonydaimenew.akamaized.net/hls/live/2105079/cricodi1809/HIN/std_lrh-800300010.m3u8?hdnea=exp=1789749461~acl=/*~id=58385575493512869088749323581865~hmac=ece70a90be50a345ad627087cdd87589b83bc3829a53b6494a8f62e39d4d0ab2";
+        const rewrittenManifest = text.split("\n").map(line => {
+          if (line && !line.startsWith("#") && !line.startsWith("http")) {
+            const absoluteUrl = line.startsWith("/") ? `${targetUrlObj.origin}${line}` : `${basePath}${line}`;
+            return `${url.origin}/?url=${encodeURIComponent(absoluteUrl)}`;
+          } else if (line.startsWith("#EXT-X-KEY:") && line.includes("URI=\"") && !line.includes("URI=\"http")) {
+            const uriMatch = line.match(/URI="(.*?)"/);
+            if (uriMatch && uriMatch[1]) {
+              const absoluteUrl = uriMatch[1].startsWith("/") ? `${targetUrlObj.origin}${uriMatch[1]}` : `${basePath}${uriMatch[1]}`;
+              return line.replace(uriMatch[1], `${url.origin}/?url=${encodeURIComponent(absoluteUrl)}`);
+            }
+          }
+          return line;
+        }).join("\n");
         
-        // Routes the request through your Cloudflare Pages _worker.js dynamically
-        const sourceUrl = window.location.origin + "/?url=" + encodeURIComponent(rawUrl);
+        body = rewrittenManifest;
+        responseHeaders.delete("Content-Length");
+      }
 
-        const plyrOptions = {
-            controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen']
-        };
-
-        if (Hls.isSupported()) {
-            const hls = new Hls({
-                debug: false
-            });
-            hls.loadSource(sourceUrl);
-            hls.attachMedia(videoElement);
-            hls.on(Hls.Events.MANIFEST_PARSED, function () {
-                new Plyr(videoElement, plyrOptions);
-                videoElement.play().catch(() => {});
-            });
-        } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-            videoElement.src = sourceUrl;
-            new Plyr(videoElement, plyrOptions);
-            videoElement.addEventListener('loadedmetadata', function () {
-                videoElement.play().catch(() => {});
-            });
-        }
-    </script>
-</body>
-</html>
+      return new Response(body, {
+        status: response.status,
+        headers: responseHeaders,
+      });
+    } catch (error) {
+      return new Response(`Error: ${error.message}`, { status: 500 });
+    }
+  },
+};
