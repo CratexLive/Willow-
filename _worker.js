@@ -9,48 +9,64 @@ export default {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sony Live Player</title>
+    <title>Sony Live Stream Player</title>
     <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
     <style>
-        body { margin: 0; background-color: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .player-wrapper { width: 100%; max-width: 800px; }
+        body { 
+            margin: 0; 
+            background-color: #0b0b0b; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+        }
+        .player-wrapper { 
+            width: 100%; 
+            max-width: 900px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border-radius: 8px;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
     <div class="player-wrapper">
         <video id="player" controls crossorigin playsinline muted></video>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15"></script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
     <script>
-        const video = document.getElementById('player');
-        // Yahan apni Sony wali m3u8 link daal sakte hain
-        const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2094590/cricodi1809/TAM/std_lrh-800300010.m3u8?hdnea=exp=1789747035~acl=/*~id=85257464605952000924575211579778~hmac=94e2175eab0b98450236e44060c28f2045535837604668e0ebfc193418355714";
-        
-        const source = \`\${window.location.origin}/?url=\${encodeURIComponent(streamUrl)}\`;
+        document.addEventListener('DOMContentLoaded', () => {
+            const video = document.getElementById('player');
+            const streamUrl = "https://sonydaimenew.akamaized.net/hls/live/2094590/cricodi1809/TAM/std_lrh-800300010.m3u8?hdnea=exp=1789747035~acl=/*~id=85257464605952000924575211579778~hmac=94e2175eab0b98450236e44060c28f2045535837604668e0ebfc193418355714";
+            const source = window.location.origin + '/?url=' + encodeURIComponent(streamUrl);
 
-        if (Hls.isSupported()) {
-            const hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true,
-                backBufferLength: 30
-            });
-            hls.loadSource(source);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                const player = new Plyr(video, {
-                    autoplay: true,
-                    controls: ['play-large', 'play', 'mute', 'volume', 'settings', 'fullscreen']
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 30
                 });
-                player.play();
-            });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            video.src = source;
-            video.addEventListener('loadedmetadata', () => {
-                const player = new Plyr(video, { autoplay: true });
-                player.play();
-            });
-        }
+
+                hls.loadSource(source);
+                hls.attachMedia(video);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    const player = new Plyr(video, {
+                        autoplay: true,
+                        controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'fullscreen']
+                    });
+                    video.play().catch(() => {});
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = source;
+                video.addEventListener('loadedmetadata', () => {
+                    const player = new Plyr(video, { autoplay: true });
+                    video.play();
+                });
+            }
+        });
     </script>
 </body>
 </html>`;
@@ -69,7 +85,6 @@ export default {
       });
     }
 
-    // Sony ke liye headers adjust kiye gaye hain
     const forwardHeaders = new Headers();
     forwardHeaders.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
     forwardHeaders.set("Referer", "https://www.sonyliv.com/");
@@ -81,7 +96,7 @@ export default {
         headers: forwardHeaders,
       });
 
-      const contentType = response.headers.get("content-type"] || "";
+      const contentType = response.headers.get("content-type") || "";
       const isManifest = contentType.includes("mpegurl") || targetUrl.includes(".m3u8");
 
       if (isManifest) {
