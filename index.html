@@ -19,6 +19,7 @@ class CricXCrateUI extends HTMLElement {
     this._shadow = this.attachShadow({ mode: 'closed' });
     this.SENSITIVITY = 2.5;
     
+    // Updated Stream URLs (Alpha -> main, Bravo -> backup)
     this.STREAMS = {
       main: {
         "Server 1": "https://otte.live.fly.ww.aiv-cdn.net/pdx-nitro/live/clients/dash/enc/45rdnte6d6/out/v1/78a278d9350e4c57bc64f1142d08db41/cenc.mpd",
@@ -36,6 +37,7 @@ class CricXCrateUI extends HTMLElement {
       }
     };
 
+    // Updated ClearKey DRM Configuration
     this.DRM_CONFIG = {
       keyId: "07dc2346823644f4fc76855ac0b28934",
       keyVal: "f390daae70c6db7787471e7790ef55e3"
@@ -44,9 +46,7 @@ class CricXCrateUI extends HTMLElement {
     this.CONFIG = {
       telegramLink: "https://t.me/+xSqMXDXp78ZiOWQ1",
       currentQuality: "main",
-      currentServer: "Server 3",
-      serverList: ["Server 3", "Server 1", "Server 2", "Server 4", "Server 5"],
-      serverIndex: 0
+      currentServer: "Server 3"
     };
 
     this.animationFrameId = null;
@@ -182,6 +182,7 @@ class CricXCrateUI extends HTMLElement {
         .mode-toggle-btn.active { background: var(--accent); color: #000; box-shadow: 0 0 10px var(--accent-glow); }
         .mode-toggle-btn.active i { background: #000; }
 
+        /* 1 Second Smooth Fade-in & Fade-out Popup Animation Styles */
         .tg-modal-overlay { position: fixed; inset: 0; background: rgba(2, 4, 8, 0.95); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); z-index: 1000000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1); }
         .tg-modal-overlay.show { opacity: 1; pointer-events: all; }
         
@@ -292,6 +293,7 @@ class CricXCrateUI extends HTMLElement {
         </footer>
       </div>
 
+      <!-- Popup 1: Initial Opening Modal -->
       <div class="tg-modal-overlay" id="tgInitialModal">
         <div class="tg-modal-box">
           <div class="tg-modal-icon">
@@ -304,6 +306,7 @@ class CricXCrateUI extends HTMLElement {
         </div>
       </div>
 
+      <!-- Popup 2: Large Smooth Popup with Corner Cancel Cross Button Only -->
       <div class="tg-modal-overlay" id="tgSecondModal">
         <div class="tg-modal-box">
           <button class="modal-close-cross" id="modalCloseCross">
@@ -373,13 +376,6 @@ class CricXCrateUI extends HTMLElement {
       this.setupIframePlayer();
     });
 
-    // Listen to iframe messages for auto-failover index shift across servers
-    window.addEventListener('message', (e) => {
-      if (e.data && e.data.type === 'cricxcrate-server-fail') {
-        this.switchToNextServer();
-      }
-    });
-
     btnShare.addEventListener("click", async () => {
       const shareData = {
         title: "Willow by CricXCrate — Match Stream",
@@ -399,36 +395,12 @@ class CricXCrateUI extends HTMLElement {
     });
   }
 
-  switchToNextServer() {
-    const servers = this.CONFIG.serverList;
-    this.CONFIG.serverIndex = (this.CONFIG.serverIndex + 1) % servers.length;
-    this.CONFIG.currentServer = servers[this.CONFIG.serverIndex];
-    
-    // Update active UI buttons visually
-    const serverGroup = this._shadow.getElementById("serverGroup");
-    if (serverGroup) {
-      serverGroup.querySelectorAll("button").forEach(b => {
-        if (b.getAttribute("data-server") === this.CONFIG.currentServer) {
-          b.classList.add("active");
-        } else {
-          b.classList.remove("active");
-        }
-      });
-    }
-
-    console.log(`Auto-failover: Switching to ${this.CONFIG.currentServer}`);
-    this.setupIframePlayer();
-  }
-
   setupIframePlayer() {
     const iframe = this._shadow.getElementById('player');
     const quality = this.CONFIG.currentQuality;
     const server = this.CONFIG.currentServer;
     const streamUrl = this.STREAMS[quality][server];
     
-    // Update server index tracker
-    this.CONFIG.serverIndex = this.CONFIG.serverList.indexOf(server);
-
     const infoTitle = this._shadow.getElementById('streamInfoTitle');
     if (infoTitle) {
       const qualityName = quality === 'main' ? 'Main Stream' : 'Backup Stream';
@@ -473,22 +445,12 @@ class CricXCrateUI extends HTMLElement {
               drm: { clearKeys: keys, preferredKeySystems: ['org.w3.clearkey'] }
             });
 
-            // Auto-Failover Error Listener
-            player.addEventListener('error', (event) => {
-              const err = event.detail;
-              if (err.severity === shaka.util.Error.Severity.CRITICAL) {
-                console.warn('Stream failed or server down, triggering auto-failover...', err);
-                window.parent.postMessage({ type: 'cricxcrate-server-fail' }, '*');
-              }
-            });
-
             try {
               await player.load(manifestUri);
               if (player.isLive()) player.seek(player.seekRange().end);
               video.play().catch(() => {});
             } catch (e) {
-              console.error('Error loading stream, switching server...', e);
-              window.parent.postMessage({ type: 'cricxcrate-server-fail' }, '*');
+              console.error('Error loading stream', e);
             }
           }
 
