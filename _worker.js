@@ -3,9 +3,52 @@ export default {
     const url = new URL(request.url);
     const targetUrlParam = url.searchParams.get('url');
 
-    // Agar 'url' parameter nahi hai, toh static file (index.html) serve karo
+    // Agar URL parameter nahi hai, toh built-in HTML player dikhao
     if (!targetUrlParam) {
-      return env.ASSETS.fetch(request);
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HLS Player</title>
+    <style>
+        body { margin: 0; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #fff; }
+        video { width: 100%; max-height: 85vh; }
+        .input-box { margin-bottom: 15px; display: flex; gap: 10px; width: 90%; max-width: 600px; }
+        input { flex: 1; padding: 10px; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px; }
+        button { padding: 10px 20px; background: #e50914; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="input-box">
+        <input type="text" id="streamUrl" placeholder="Paste .m3u8 URL here...">
+        <button onclick="playStream()">Play</button>
+    </div>
+    <video id="video" controls autoplay></video>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+        function playStream() {
+            const rawUrl = document.getElementById('streamUrl').value.trim();
+            if (!rawUrl) return;
+            const proxyUrl = window.location.origin + '/?url=' + encodeURIComponent(rawUrl);
+            const video = document.getElementById('video');
+            
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(proxyUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = proxyUrl;
+                video.addEventListener('loadedmetadata', () => video.play());
+            }
+        }
+    </script>
+</body>
+</html>`;
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
+      });
     }
 
     let targetUrl;
